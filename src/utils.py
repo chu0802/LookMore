@@ -1,6 +1,9 @@
 import argparse
 from dataclasses import dataclass
 from typing import Optional
+import torch
+import numpy as np
+import random
 
 @dataclass
 class Arg:
@@ -25,6 +28,8 @@ class Arg:
 
     def parse(self):
         kwargs = {k: v for k, v in vars(self).items() if k not in ["name", "abbr"]}
+        if self.abbr is None:
+            return [self.name], kwargs
         return [self.name, self.abbr], kwargs
 
 def argument_parser(*args):
@@ -36,3 +41,12 @@ def argument_parser(*args):
         parser.add_argument(*list_arguments, **dict_arguments)
     return parser.parse_args()
 
+
+def seed_everything(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    np.random.seed(seed)
+    random.seed(seed)
