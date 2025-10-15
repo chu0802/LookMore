@@ -2,3 +2,4 @@ run.sh
 output
 models
 __pycache__/
+tmp.py
