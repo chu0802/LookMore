@@ -2,8 +2,8 @@ import torch
 import matplotlib.pyplot as plt
 import math
 from pathlib import Path
-from src.evaluation.mask_evaluation import maps_to_masks
-import argparse
+from src.eval.mask_evaluation import maps_to_masks
+from src.utils import Arg, argument_parser
 
 def visualize_selector_map(selector_map, cmap="turbo", output_filename=None):
     if output_filename is None:
@@ -18,17 +18,6 @@ def visualize_selector_map(selector_map, cmap="turbo", output_filename=None):
     plt.ylabel("Patch Row")
     plt.savefig(output_filename)
     plt.close()
-    
-def argument_parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--mask_ratio", type=float, default=0.2)
-    parser.add_argument("--k_ratio", type=float, default=0.2)
-    parser.add_argument("--maps_index", type=int, default=0)
-    parser.add_argument("--maps_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/output"))
-    parser.add_argument("--ouptut_dir", type=Path, default=Path("output/vis"))
-    parser.add_argument("--num", defualt=10, type=int)
-    
-    return parser.parse_args()
 
 def main(args):
     maps_filename = Path(f"selector_map_{args.maps_index}.pt")
@@ -53,4 +42,11 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(argument_parser())
+    main(argument_parser(
+        Arg("--mask_ratio", type=float, default=0.2),
+        Arg("--k_ratio", type=float, default=0.2),
+        Arg("--maps_index", type=int, default=0),
+        Arg("--maps_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/output")),
+        Arg("--ouptut_dir", type=Path, default=Path("output/vis")),
+        Arg("--num", defualt=10, type=int),
+    ))
