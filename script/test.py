@@ -2,19 +2,8 @@ import torch
 from torchvision import transforms
 from src.lookwhere.modeling import LookWhereDownstream
 from torch.utils.data import DataLoader
-import argparse
+from src.utils import Arg, argument_parser
 from datasets import load_dataset
-
-def argument_parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--img_size", type=int, default=518)
-    parser.add_argument("--k_ratio", type=float, default=0.1)
-    parser.add_argument("--num_classes", type=int, default=0)
-    parser.add_argument("--is_classification", action="store_true")
-    parser.add_argument("--pretrained_params_path", type=str, default="models/lookwhere_dinov2.pt")
-    parser.add_argument("--device", type=str, default="cuda")
-    args = parser.parse_args()
-    return args
 
 def trans(examples, high_res_img_size=518):
     transform = transforms.Compose([
@@ -67,5 +56,12 @@ def main(args):
     torch.save(all_selector_map, f"output/maps/selector_map_{counter}.pt")
 
 if __name__ == "__main__":
-    args = argument_parser()
+    args = argument_parser(
+        Arg("--img_size", type=int, default=518),
+        Arg("--k_ratio", type=float, default=0.1),
+        Arg("--num_classes", type=int, default=0),
+        Arg("--is_classification", action="store_true"),
+        Arg("--pretrained_params_path", type=str, default="models/lookwhere_dinov2.pt"),
+        Arg("--device", type=str, default="cuda"),
+    )
     main(args)
