@@ -2,6 +2,8 @@ import torch
 from src.utils import Arg, argument_parser
 from pathlib import Path
 from functools import partial
+from collections import defaultdict
+from tqdm import tqdm
 
 def iou(a, b, k_ratio=0.2, **kwargs):
     a_masks = maps_to_masks(a, k_ratio)
@@ -35,24 +37,34 @@ def main(args):
     k = int(args.k_ratio * num_high_res_patches)
 
     ground_truth_folder = args.output_dir / "maps"
-    predicted_folder = args.output_dir / f"masked_maps_{args.mask_ratio}"
+    predicted_folder = args.output_dir / args.eval_folder
 
-    for filename in sorted(predicted_folder.glob("*.pt")):
+    total_scores = defaultdict(int)
+    total_num = 0
+    
+    maps = sorted(predicted_folder.glob("*.pt"))
+
+    for filename in tqdm(maps, total=len(maps)):
         ground_truth_maps = torch.load(ground_truth_folder / filename.name)
         predicted_maps = torch.load(predicted_folder / filename.name)
-        print(f"{filename.name}:")
+        total_num += ground_truth_maps.shape[0]
         for eval_method in args.eval_methods:
             eval_func = partial(globals()[eval_method], k_ratio=args.k_ratio)            
             score = eval_func(ground_truth_maps, predicted_maps)
-            print(f"{eval_method}: {(100 * score):.2f}%", end=" ")
-        print()
-        break
+            total_scores[eval_method] += score.item() * ground_truth_maps.shape[0]
+
+    
+    for eval_method, score in total_scores.items():
+        print(f"{eval_method}: {(100 * score / total_num):.2f}%")
 
 if __name__ == "__main__":
     args = argument_parser(
         Arg("-o", "--output_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/output")),
-        Arg("-m", "--mask_ratio", type=float, default=0.2),
+        Arg("-v", "--eval_folder", default="masked_maps_0.2"),
         Arg("-k", "--k_ratio", type=float, default=0.2),
-        Arg("-e", "--eval_methods", type=str, nargs="+", default=["iou"]),
+        Arg("-e", "--eval_methods", type=str, nargs="+", default=["iou", "dice", "cos"]),
+        Arg("-m", "--mode", type=str, default="test")
     )
+    if args.mode == "test":
+        args.output_dir = args.output_dir / args.mode
     main(args)
