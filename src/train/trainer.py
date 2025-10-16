@@ -3,7 +3,7 @@ from src.utils import Arg, argument_parser
 from pathlib import Path
 from src.lookwhere.modeling import Selector
 from src.lookwhere.transforms import trans
-from src.utils import seed_everything
+from src.utils import seed_everything, none_or_str
 from torch.utils.data import Dataset, DataLoader
 import torch
 from torch import optim
@@ -15,7 +15,7 @@ import wandb
 
 
 class MaskedDataset(Dataset):
-    def __init__(self, input_dataset, groundtruth_dataset, input_masked_ratio=0.1, output_masked_ratio=0.0):
+    def __init__(self, input_dataset, groundtruth_dataset, input_masked_ratio=[0.1], output_masked_ratio=0.0):
         super().__init__()
         self.input = input_dataset
         self.groundtruth = groundtruth_dataset
@@ -28,9 +28,12 @@ class MaskedDataset(Dataset):
     def __getitem__(self, idx):
         image = self.input[idx]["image"]
         selector_map = self.groundtruth[idx]
-
+        
+        # randomly pick up on masked_ratio from self.input_masked_ratio
+        ratio = self.input_masked_ratio[torch.randint(len(self.input_masked_ratio), (1,))]
+        
         # randomly mask the input image
-        mask = (torch.rand(1, image.shape[1], image.shape[2]) >= self.input_masked_ratio).to(image.dtype)
+        mask = (torch.rand(1, image.shape[1], image.shape[2]) >= ratio).to(image.dtype)
         
         masked_input = image * mask
         
@@ -44,9 +47,13 @@ def main(args):
     accelerator = Accelerator()
     device = accelerator.device
     
-    pretrained_params = torch.load(args.pretrained_params_path, map_location="cpu", weights_only=True)
+    if args.pretrained_params_path is not None:
+        pretrained_params = torch.load(args.pretrained_params_path, map_location="cpu", weights_only=True)["selector"]
+    else:
+        pretrained_params = None
+
     selector = Selector(
-        pretrained_params=pretrained_params["selector"],
+        pretrained_params=pretrained_params,
         lw_type="dinov2",
         hr_size=518,
         device=device,
@@ -57,7 +64,7 @@ def main(args):
             project="lookmore",
             config={
                 "seed": args.seed,
-                "input_masked_ratio": args.input_masked_ratio,
+                "input_masked_ratio": "_".join([str(r) for r in args.input_masked_ratio]),
                 "output_masked_ratio": args.output_masked_ratio,
                 "num_epoches": args.num_epoches,
             }
@@ -138,7 +145,7 @@ def main(args):
             global_step += 1
 
     if accelerator.is_main_process:
-        exp_name = f"seed_{args.seed}_mask_{args.input_masked_ratio}_{args.output_masked_ratio}_epoches_{args.num_epoches}"
+        exp_name = f"seed_{args.seed}_mask_{'_'.join([str(r) for r in args.input_masked_ratio])}_{args.output_masked_ratio}_epoches_{args.num_epoches}"
         save_dir = args.final_output_dir / exp_name
         save_dir.mkdir(parents=True, exist_ok=True)
         unwrapped = accelerator.unwrap_model(selector)
@@ -150,9 +157,9 @@ if __name__ == "__main__":
     args = argument_parser(
         Arg("-d", "--dataset_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/output/subsample_maps/128000")),
         Arg("-s", "--seed", type=int, default=1102),
-        Arg("-p", "--pretrained_params_path", type=str, default="models/lookwhere_dinov2.pt"),
+        Arg("-p", "--pretrained_params_path", type=none_or_str, default="models/lookwhere_dinov2.pt"),
         Arg("-n", "--num_epoches", type=int, default=10),
-        Arg("-i", "--input_masked_ratio", type=float, default=0.2),
+        Arg("-i", "--input_masked_ratio", type=float, default=[0.2], nargs="+"),
         Arg("-o", "--output_masked_ratio", type=float, default=0.0),
         Arg("-f", "--final_output_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/models")),
     )
