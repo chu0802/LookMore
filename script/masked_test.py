@@ -17,7 +17,7 @@ def main(args):
     k = int(args.k_ratio * num_high_res_patches)
     pretrained_params = torch.load(args.pretrained_params_path, map_location="cpu", weights_only=True)
     
-    output_dir = Path("/home/yuchuyu/project/lookwhere/output/")
+    output_dir = args.output_dir
     if args.mode == "test":
         output_dir = output_dir / "test"
     
@@ -82,6 +82,7 @@ if __name__ == "__main__":
         Arg("--device", type=str, default="cuda"),
         Arg("--seed", type=int, default=1102),
         Arg("--mask_ratio", type=float, default=0.1),
-        Arg("--mode", type=str, default="test", choices=["train", "test"])
+        Arg("--mode", type=str, default="test", choices=["train", "test"]),
+        Arg("--output_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/output"))
     )
     main(args)

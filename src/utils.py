@@ -50,3 +50,6 @@ def seed_everything(seed):
     torch.backends.cudnn.benchmark = False
     np.random.seed(seed)
     random.seed(seed)
+
+def none_or_str(x):
+    return None if x == "None" else x
