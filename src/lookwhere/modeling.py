@@ -135,11 +135,8 @@ class Selector(nn.Module):
     def forward(self, x, mask=None):
         if mask is not None:
             x *= mask
-        x = F.interpolate(x, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
         x = self.model.patch_embed(x)  # (bs, num_patches, dim)
         x = x + self.model.pos_embed
-        
-        
 
         if self.lw_type == "dinov2":
             x_prefix = torch.cat([

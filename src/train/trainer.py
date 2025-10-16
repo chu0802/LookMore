@@ -29,7 +29,6 @@ class MaskedDataset(Dataset):
         image = self.input[idx]["image"]
         selector_map = self.groundtruth[idx]
         
-        # randomly pick up on masked_ratio from self.input_masked_ratio
         ratio = self.input_masked_ratio[torch.randint(len(self.input_masked_ratio), (1,))]
         
         # randomly mask the input image
