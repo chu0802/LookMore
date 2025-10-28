@@ -11,7 +11,7 @@ from src.lookwhere.utils import interpolate_pos_encoding, upsample_grid_nn
     
 
 class Extractor(nn.Module):
-    def __init__(self, pretrained_params, lw_type, img_size, device):
+    def __init__(self, lw_type, img_size, device, pretrained_params=None):
         super().__init__()
         assert lw_type in ["franca", "dinov2"]
         patch_size = 14
@@ -34,7 +34,7 @@ class Extractor(nn.Module):
             num_patches = (img_size // patch_size) ** 2
             self.model.pos_embed = torch.nn.Parameter(torch.zeros(1, num_patches, embed_dim))
         
-        if img_size != 518:
+        if img_size != 518 and pretrained_params is not None:
             # we pre-trained at high_res=518x518, we thus interpolate position encoding when using other resolutions
             pretrained_params["pos_embed"] = interpolate_pos_encoding(
                 patch_pos_embed=pretrained_params["pos_embed"],
@@ -42,8 +42,9 @@ class Extractor(nn.Module):
                 width=img_size,
                 patch_size=patch_size
             )
+        if pretrained_params is not None:
+            self.model.load_state_dict(pretrained_params)
 
-        self.model.load_state_dict(pretrained_params)
         self.grid_size = img_size // patch_size
         self.to(device)
 
@@ -92,7 +93,7 @@ class SelectorHead(nn.Module):
 
 
 class Selector(nn.Module):
-    def __init__(self, lw_type, hr_size, device, pretrained_params=None):
+    def __init__(self, lw_type, hr_size, device, pretrained_params=None, selector_params_path=None):
         super().__init__()
         assert lw_type in ["franca", "dinov2"]
         depth = 3  # our selector is shallow / fast!
@@ -130,11 +131,16 @@ class Selector(nn.Module):
         if pretrained_params is not None:
             self.head.load_state_dict(pretrained_params["head"])
         
+        if selector_params_path is not None:
+            self.load_state_dict(torch.load(selector_params_path, map_location="cpu"))
+        
         self.to(device)
     
-    def forward(self, x, mask=None):
-        if mask is not None:
-            x *= mask
+    def forward(self, x, masks=None):
+        x = F.interpolate(x, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
+        if masks is not None:
+            x *= masks
+
         x = self.model.patch_embed(x)  # (bs, num_patches, dim)
         x = x + self.model.pos_embed
 
@@ -179,19 +185,24 @@ class Selector(nn.Module):
 
 
 class LookWhereDownstream(nn.Module):
-    def __init__(self, pretrained_params_path, high_res_size, num_classes, k, is_cls, device):
+    def __init__(self, pretrained_params_path, high_res_size, num_classes, k, is_cls, device, head_params_path=None, lw_type="dinov2", selector_params_path=None):
         super().__init__()
         # supports classification (1 prediction per image) and segmentation (1 prediction per patch)
 
-        last_part_of_path = pretrained_params_path.split("/")[-1]
-        assert last_part_of_path in ["lookwhere_dinov2.pt", "lookwhere_franca.pt"]
-        self.lw_type = last_part_of_path.split("_")[-1].replace(".pt", "")  # either dinov2 or franca
+        self.lw_type = lw_type
         print(f"Using LookWhere type: {self.lw_type}")
 
-        all_pretrained_params = torch.load(pretrained_params_path, map_location="cpu", weights_only=True)
+        if pretrained_params_path is not None:
+            all_pretrained_params = torch.load(pretrained_params_path, map_location="cpu", weights_only=True)
+        else:
+            all_pretrained_params = {
+                "selector": None,
+                "extractor": None,
+            }
 
         self.selector = Selector(
             pretrained_params=all_pretrained_params["selector"],
+            selector_params_path=selector_params_path,
             lw_type=self.lw_type,
             hr_size=high_res_size,
             device=device
@@ -208,15 +219,14 @@ class LookWhereDownstream(nn.Module):
             # just extract features
             self.head = nn.Identity()
         else:
-            self.head = nn.Linear(self.selector.model.embed_dim, num_classes).to(device)
-        
+            self.head = nn.Linear(self.selector.model.embed_dim, num_classes)
+            
+        if head_params_path is not None:
+            self.head.load_state_dict(torch.load(head_params_path, map_location="cpu"))
+        self.head.to(device)
         self.high_res_grid_size = high_res_size // 14  # patch size is 14
 
-    def forward(self, images, k=None):
-        with torch.no_grad():
-            # we do not fine-tune the selector
-            selector_dict = self.selector(images)
-
+    def forward_with_selector_dict(self, images, selector_dict, k=None):
         k = k if k is not None else self.k
 
         keep_patch_indices = torch.topk(selector_dict["selector_map"], k=k, sorted=True).indices
@@ -241,3 +251,25 @@ class LookWhereDownstream(nn.Module):
             logits = rearrange(logits, "b (h w) c -> b c h w", h=self.high_res_grid_size, w=self.high_res_grid_size)
             return logits
 
+    def forward(self, images, k=None):
+        with torch.no_grad():
+            # we do not fine-tune the selector
+            selector_dict = self.selector(images)
+
+        return self.forward_with_selector_dict(images, selector_dict, k=k)
+
+def load_model(pretrained_params_path, high_res_size=518, num_classes=1000, k_ratio=0.1, is_cls=True, device="cuda", head_params_path=None, selector_params_path=None):
+    num_high_res_patches = (high_res_size // 14)**2
+    k = int(k_ratio * num_high_res_patches)
+
+    model = LookWhereDownstream(
+        pretrained_params_path=pretrained_params_path,
+        high_res_size=high_res_size,
+        num_classes=num_classes,
+        k=k,
+        is_cls=is_cls,
+        device=device,
+        head_params_path=head_params_path,
+        selector_params_path=selector_params_path,
+    )
+    return model
