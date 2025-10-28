@@ -33,16 +33,14 @@ def maps_to_masks(maps, k_ratio):
     return (maps >= thresh).float()
 
 def main(args):
-    num_high_res_patches = (518 // 14)**2
-    k = int(args.k_ratio * num_high_res_patches)
+    ground_truth_folder = args.output_dir / "maps_masked_ratio_0.0"
+    predicted_folder = args.output_dir / f"maps_masked_ratio_{args.mask_ratio:0.1f}"
 
-    ground_truth_folder = args.output_dir / "maps"
-    predicted_folder = args.output_dir / args.eval_folder
 
     total_scores = defaultdict(int)
     total_num = 0
     
-    maps = sorted(predicted_folder.glob("*.pt"))
+    maps = sorted(predicted_folder.glob("selector_map_*.pt"))
 
     for filename in tqdm(maps, total=len(maps)):
         ground_truth_maps = torch.load(ground_truth_folder / filename.name)
@@ -59,12 +57,10 @@ def main(args):
 
 if __name__ == "__main__":
     args = argument_parser(
-        Arg("-o", "--output_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/output")),
-        Arg("-v", "--eval_folder", default="masked_maps_0.2"),
-        Arg("-k", "--k_ratio", type=float, default=0.2),
+        Arg("-o", "--output_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/output/validation")),
+        Arg("-m", "--mask_ratio", type=float, default=0.1),
+        Arg("-k", "--k_ratio", type=float, default=0.1),
         Arg("-e", "--eval_methods", type=str, nargs="+", default=["iou", "dice", "cos"]),
-        Arg("-m", "--mode", type=str, default="test")
     )
-    if args.mode == "test":
-        args.output_dir = args.output_dir / args.mode
+
     main(args)
