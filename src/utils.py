@@ -28,6 +28,11 @@ class Arg:
 
     def parse(self):
         kwargs = {k: v for k, v in vars(self).items() if k not in ["name", "abbr"]}
+        if self.action is not None:
+            kwargs.pop("type", None)
+            kwargs.pop("choices", None)
+            kwargs.pop("nargs", None)
+
         if self.abbr is None:
             return [self.name], kwargs
         return [self.name, self.abbr], kwargs
