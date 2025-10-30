@@ -97,9 +97,12 @@ if __name__ == "__main__":
         Arg("--device", type=str, default="cuda"),
         Arg("--mode", type=str, default="validation", choices=["train", "test", "validation"]),
         Arg("--output_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/output")),
+        Arg("--tag", type=str, default=None),
         Arg("--mask_ratio", type=float, default=0.0),
         Arg("--seed", type=int, default=1102),
     )
-    
-    args.output_dir = args.output_dir / args.mode / f"maps_masked_ratio_{args.mask_ratio:0.1f}"
+    base_output_dir = args.output_dir / args.mode
+    if args.tag is not None:
+        base_output_dir /= args.tag
+    args.output_dir = base_output_dir / f"maps_masked_ratio_{args.mask_ratio:0.1f}"
     main(args)
