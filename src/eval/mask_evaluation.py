@@ -25,7 +25,7 @@ def cos(a, b, **kwargs):
     return (torch.sum(a*b, dim=-1) / (torch.norm(a, dim=-1) * torch.norm(b, dim=-1) + 1e-8)).mean()
 
 
-def maps_to_masks(maps, k_ratio):
+def maps_to_masks(maps, k_ratio, device="cpu"):
     k = int(maps.shape[-1] * k_ratio)
     topk_vals, _ = torch.topk(maps, k, dim=-1)
     thresh = topk_vals[..., -1, None]
@@ -33,7 +33,7 @@ def maps_to_masks(maps, k_ratio):
     return (maps >= thresh).float()
 
 def main(args):
-    ground_truth_folder = args.output_dir / "maps_masked_ratio_0.0"
+    ground_truth_folder = Path("/home/yuchuyu/project/lookwhere/output/validation/maps_masked_ratio_0.0")
     predicted_folder = args.output_dir / f"maps_masked_ratio_{args.mask_ratio:0.1f}"
 
 

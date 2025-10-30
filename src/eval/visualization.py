@@ -22,7 +22,7 @@ def visualize_selector_map(selector_map, cmap="turbo", output_filename=None):
 def main(args):
     maps_filename = Path(f"selector_map_{args.maps_index:03d}.pt")
     
-    gt_maps = torch.load(args.maps_dir / "maps_masked_ratio_0.0" / maps_filename)
+    gt_maps = torch.load(Path("/home/yuchuyu/project/lookwhere/output/validation") / "maps_masked_ratio_0.0" / maps_filename)
     selector_maps = torch.load(args.maps_dir / f"maps_masked_ratio_{args.mask_ratio:0.1f}" / maps_filename)
     
     if args.to_mask:
@@ -52,8 +52,8 @@ if __name__ == "__main__":
         Arg("--mask_ratio", type=float, default=0.1),
         Arg("--k_ratio", type=float, default=0.2),
         Arg("--maps_index", type=int, default=0),
-        Arg("--maps_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/output/validation")),
-        Arg("--output_dir", type=Path, default=Path("output/vis/validation")),
+        Arg("--maps_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/output/validation/0.1_0.9_pretrained")),
+        Arg("--output_dir", type=Path, default=Path("output/vis/validation/finetuned")),
         Arg("--num", default=10, type=int),
         Arg("--to_mask", action="store_true")
     ))
