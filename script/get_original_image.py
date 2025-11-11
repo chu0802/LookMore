@@ -2,7 +2,7 @@ import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from src.utils import Arg, argument_parser
-from datasets import load_dataset
+from src.utils import load_dataset_with_index, cumulative_mask_generator
 from pathlib import Path
 from PIL import Image
 from src.utils import seed_everything
@@ -14,6 +14,8 @@ def trans_for_save(examples, img_size=518):
     transform = transforms.Compose([
         transforms.Lambda(lambda img: img.convert("RGB")),
         transforms.Resize((img_size, img_size), interpolation=transforms.InterpolationMode.BICUBIC),
+        transforms.Resize((154, 154), interpolation=transforms.InterpolationMode.BILINEAR),
+        transforms.ToTensor(),
     ])
     examples["image"] = [transform(example) for example in examples["image"]]
     return examples
@@ -22,15 +24,25 @@ def trans_for_save(examples, img_size=518):
 def main(args):
     seed_everything(args.seed)
     
-    output_dir = Path(args.output_dir) / "vis" / args.mode / "original"
+    # output_dir = Path(args.output_dir) / "vis" / args.mode / "original"
+    output_dir = Path(args.output_dir) / "vis" / args.mode / "cum_mask" / "original" / f"mask_ratio_{args.mask_ratio}"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"Loading ImageNet {args.mode} dataset...")
-    ds = load_dataset("ILSVRC/imagenet-1k", split=args.mode)
+    ds = load_dataset_with_index("ILSVRC/imagenet-1k", split=args.mode)
     ds.set_transform(lambda x: trans_for_save(x, img_size=args.img_size))
     
     for i in range(args.num):
         img = ds[i]["image"]
+        if args.mask_ratio > 0:
+            img *= cumulative_mask_generator(
+                shape=(154, 154),
+                mask_ratio=args.mask_ratio,
+                indices=i,
+                base_seed=1102,
+                device="cpu"
+            ).squeeze(0)
+        img = transforms.ToPILImage()(img)
         img.save(output_dir / f"{i:05d}.png")
 
 if __name__ == "__main__":
@@ -40,5 +52,6 @@ if __name__ == "__main__":
         Arg("--mode", type=str, default="validation", choices=["train", "test", "validation"]),
         Arg("--output_dir", type=Path, default=Path("/home/yuchuyu/LookMore/output")),
         Arg("--num", type=int, default=10, help="Number of images to save"),
+        Arg("--mask_ratio", type=float, default=0.0)
     )
     main(args)
