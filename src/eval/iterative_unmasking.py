@@ -6,7 +6,7 @@ from src.lookwhere.modeling import load_model
 from src.lookwhere.transforms import trans
 from torch.utils.data import DataLoader
 from src.utils import Arg, argument_parser
-from datasets import load_dataset
+from src.utils import load_dataset_with_index
 from pathlib import Path
 from tqdm import tqdm
 from src.utils import seed_everything
@@ -75,7 +75,7 @@ def main(args):
 
     lw.eval()
 
-    ds = load_dataset("ILSVRC/imagenet-1k", split=args.mode)
+    ds = load_dataset_with_index("ILSVRC/imagenet-1k", split=args.mode)
     ds.set_transform(trans)
 
     dataloader = DataLoader(ds, batch_size=1024, shuffle=False, drop_last=False, num_workers=4, pin_memory=True)

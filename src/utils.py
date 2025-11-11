@@ -4,6 +4,8 @@ from typing import Optional
 import torch
 import numpy as np
 import random
+from datasets import load_dataset
+
 
 @dataclass
 class Arg:
@@ -58,3 +60,31 @@ def seed_everything(seed):
 
 def none_or_str(x):
     return None if x == "None" else x
+
+
+def cumulative_mask_generator(shape, mask_ratio, indices, base_seed=1102, device="cuda"):
+    if isinstance(indices, int):
+        indices = [indices]
+
+    total_size = torch.prod(torch.tensor(shape)).item()
+    masked_size = int(total_size * (1 - mask_ratio))
+    
+    masks = torch.zeros((len(indices), total_size), device=device)
+
+    for i, idx in enumerate(indices):
+        if isinstance(idx, torch.Tensor):
+            idx = idx.item()
+
+        generator = torch.Generator(device=device)
+        generator.manual_seed(int(base_seed + idx))
+
+        perm = torch.randperm(total_size, generator=generator, device=device)
+        masks[i, perm[:masked_size]] = 1
+
+    return masks.reshape(len(indices), 1, *shape)
+
+def load_dataset_with_index(name, split):
+    ds = load_dataset(name, split=split)
+    ds = ds.add_column("index", list(range(len(ds))))
+    ds.set_format(type="torch", columns=ds.column_names)
+    return ds

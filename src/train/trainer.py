@@ -9,7 +9,7 @@ import torch
 from torch import optim
 import torch.nn as nn
 import torch.nn.functional as F
-from datasets import load_dataset
+from src.utils import load_dataset_with_index
 from tqdm.auto import tqdm
 import wandb
 
@@ -139,7 +139,7 @@ def main(args):
     subsampled_indices = torch.load(args.dataset_dir / "indices.pt")
     subsampled_selector_maps = torch.load(args.dataset_dir / "selector_maps.pt")
     
-    raw_ds = load_dataset("ILSVRC/imagenet-1k", split="train")
+    raw_ds = load_dataset_with_index("ILSVRC/imagenet-1k", split="train")
     raw_ds.set_transform(trans)
     sub_ds = raw_ds.select(subsampled_indices)
     

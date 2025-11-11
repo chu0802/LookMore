@@ -9,7 +9,7 @@ import torch
 from torch import optim
 import torch.nn as nn
 import torch.nn.functional as F
-from datasets import load_dataset
+from src.utils import load_dataset_with_index
 from tqdm.auto import tqdm
 import wandb
 from src.lookwhere.modeling import load_model
@@ -41,7 +41,7 @@ def main(args):
         )
         wandb.watch(lw, log="all", log_freq=100)
     
-    dataset = load_dataset("ILSVRC/imagenet-1k", split=["train", "validation"])
+    dataset = load_dataset_with_index("ILSVRC/imagenet-1k", split=["train", "validation"])
     dataset.set_transform(trans)
     
     train_dataloader = DataLoader(
