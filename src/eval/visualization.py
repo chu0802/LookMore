@@ -5,11 +5,14 @@ from pathlib import Path
 from src.eval.mask_evaluation import maps_to_masks
 from src.utils import Arg, argument_parser
 
-def visualize_selector_map(selector_map, cmap="turbo", output_filename=None):
+def visualize_selector_map(selector_map, cmap="turbo", output_filename=None, is_flatten=True):
     if output_filename is None:
         output_filename = "output.png"
-    grid_size = int(math.sqrt(selector_map.shape[0]))
-    selector_map_grid = selector_map.reshape(grid_size, grid_size).cpu().numpy()
+    if is_flatten:
+        grid_size = int(math.sqrt(selector_map.shape[0]))
+        selector_map_grid = selector_map.reshape(grid_size, grid_size).cpu().numpy()
+    else:
+        selector_map_grid = selector_map.cpu().numpy()
     plt.figure(figsize=(8, 8))
     plt.imshow(selector_map_grid, cmap=cmap, interpolation="nearest")
     plt.colorbar(label="Selector Value")
@@ -52,8 +55,8 @@ if __name__ == "__main__":
         Arg("--mask_ratio", type=float, default=0.1),
         Arg("--k_ratio", type=float, default=0.2),
         Arg("--maps_index", type=int, default=0),
-        Arg("--maps_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/output/validation/0.1_0.9_pretrained")),
-        Arg("--output_dir", type=Path, default=Path("output/vis/validation/finetuned")),
+        Arg("--maps_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/output/validation/cumulative")),
+        Arg("--output_dir", type=Path, default=Path("output/vis/validation/cum_mask/pretrained")),
         Arg("--num", default=10, type=int),
         Arg("--to_mask", action="store_true")
     ))
