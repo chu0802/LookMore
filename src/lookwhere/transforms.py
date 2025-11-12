@@ -14,3 +14,12 @@ def trans(examples, high_res_img_size=518, selector_img_size=154):
     ])
     examples["image"] = [transform(example) for example in examples["image"]]
     return examples
+
+def trans_for_save(examples, img_size=518):
+    transform = transforms.Compose([
+        transforms.Lambda(lambda img: img.convert("RGB")),
+        transforms.Resize((img_size, img_size), interpolation=transforms.InterpolationMode.BICUBIC),
+        transforms.ToTensor(),
+    ])
+    examples["image"] = [transform(example) for example in examples["image"]]
+    return examples

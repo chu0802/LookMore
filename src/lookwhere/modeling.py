@@ -136,12 +136,15 @@ class Selector(nn.Module):
         
         self.to(device)
     
-    def forward(self, x, masks=None):
+    def forward(self, x, masks=None, masks_after_patch_embed=None):
         x = F.interpolate(x, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
         if masks is not None:
             x *= masks
 
         x = self.model.patch_embed(x)  # (bs, num_patches, dim)
+        if masks_after_patch_embed is not None:
+            x *= masks_after_patch_embed
+        
         x = x + self.model.pos_embed
 
         if self.lw_type == "dinov2":
@@ -174,11 +177,15 @@ class Selector(nn.Module):
             i=self.resolution_multiplier,
             j=self.resolution_multiplier
         )
-        selector_map = F.interpolate(selector_map, size=(self.target_grid_size, self.target_grid_size), mode='bilinear', align_corners=False)
-        selector_map = rearrange(selector_map, "b 1 h w -> b (h w)")
+        upsample_selector_map = F.interpolate(selector_map, size=(self.target_grid_size, self.target_grid_size), mode='bilinear', align_corners=False)
+        upsample_selector_map = rearrange(upsample_selector_map, "b 1 h w -> b (h w)")
+        
+        original_selector_map = F.interpolate(selector_map, size=(self.input_grid_size, self.input_grid_size), mode='bilinear', align_corners=False)
+        original_selector_map = rearrange(original_selector_map, "b 1 h w -> b (h w)")
         
         return {
-            "selector_map": selector_map,
+            "original_selector_map": original_selector_map,
+            "selector_map": upsample_selector_map,
             "prefix_tokens": prefix_tokens,
             "patch_tokens": patch_tokens
         }

@@ -13,6 +13,10 @@ def visualize_selector_map(selector_map, cmap="turbo", output_filename=None, is_
         selector_map_grid = selector_map.reshape(grid_size, grid_size).cpu().numpy()
     else:
         selector_map_grid = selector_map.cpu().numpy()
+    
+    if isinstance(output_filename, Path):
+        output_filename.parent.mkdir(parents=True, exist_ok=True)
+    
     plt.figure(figsize=(8, 8))
     plt.imshow(selector_map_grid, cmap=cmap, interpolation="nearest")
     plt.colorbar(label="Selector Value")
