@@ -107,15 +107,20 @@ class Trainer:
                         step=self.global_steps,
                     )
                 self.global_steps += 1
+            
+            self.save_model(epoch=epoch)
 
         self.finish()
-    
-    def finish(self):
+
+    def save_model(self, epoch=None):
         if self.accelerator.is_main_process:
             self.output_dir.mkdir(parents=True, exist_ok=True)
             unwrapped = self.accelerator.unwrap_model(self.model)
-            torch.save(unwrapped.state_dict(), self.output_dir / "selector_final.pt")
+            tag = f"epoch_{epoch+1}" if epoch is not None else "final"
+            torch.save(unwrapped.state_dict(), self.output_dir / f"selector_{tag}.pt")
 
+    def finish(self):
+        if self.accelerator.is_main_process:
             wandb.finish()
     
 
