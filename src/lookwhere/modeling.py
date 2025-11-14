@@ -142,10 +142,10 @@ class Selector(nn.Module):
             x *= masks
 
         x = self.model.patch_embed(x)  # (bs, num_patches, dim)
+        x = x + self.model.pos_embed
+
         if masks_after_patch_embed is not None:
             x *= masks_after_patch_embed
-        
-        x = x + self.model.pos_embed
 
         if self.lw_type == "dinov2":
             x_prefix = torch.cat([
