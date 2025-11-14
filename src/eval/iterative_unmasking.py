@@ -24,10 +24,16 @@ class IterativeUnmaskTester(Tester):
         self.all_selector_maps = {i: [] for i in range(self.iteration)}
         self.mask_ratios = {i: 0 for i in range(self.iteration)}
         self.all_preds = {i: [] for i in range(self.iteration)}
+        self.all_masks = {i: [] for i in range(self.iteration)}
 
         self.output_dir = {i: self.output_dir / f"iteration_{i}" for i in range(self.iteration)}
         for v in self.output_dir.values():
             v.mkdir(parents=True, exist_ok=True)
+    
+    def dump_masks(self):
+        for k, v in self.all_masks.items():
+            all_masks = torch.cat(v, dim=0)
+            torch.save(all_masks, self.output_dir[k] / f"masks.pt")
     
     def dump_selector_maps(self, threshold=10):
         for k, v in self.all_selector_maps.items():
@@ -75,6 +81,7 @@ class IterativeUnmaskTester(Tester):
                 
                 preds = outputs.argmax(dim=1)
                 self.all_preds[iter].append(torch.stack((preds, labels), dim=1).detach().to("cpu"))
+                self.all_masks[iter].append(masks.squeeze().detach().to("cpu"))
                 
                 self.mask_ratios[iter] += (masks.squeeze().mean(dim=-1)).sum().item()
 
@@ -90,6 +97,7 @@ class IterativeUnmaskTester(Tester):
         self.dump_selector_maps()
         self.dump_accuracy()
         self.dump_mask_ratios()
+        self.dump_masks()
 
 def main(args):
     seed_everything(args.seed)
@@ -125,7 +133,7 @@ if __name__ == "__main__":
         Arg("--mode", type=str, default="validation", choices=["train", "test", "validation"]),
         Arg("--output_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/output/iterative_unmask")),
         Arg("--tag", type=str, default=None),
-        Arg("--iteration", type=int, default=9),
+        Arg("--iteration", type=int, default=10),
         Arg("--seed", type=int, default=1102),
     )
     base_output_dir = args.output_dir / args.mode
