@@ -138,14 +138,10 @@ class Selector(nn.Module):
     
     def forward(self, x, masks=None, masks_after_patch_embed=None):
         x = F.interpolate(x, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
-        if masks is not None:
-            x *= masks
 
         x = self.model.patch_embed(x)  # (bs, num_patches, dim)
         x = x + self.model.pos_embed
 
-        if masks_after_patch_embed is not None:
-            x *= masks_after_patch_embed
 
         if self.lw_type == "dinov2":
             x_prefix = torch.cat([
@@ -161,12 +157,33 @@ class Selector(nn.Module):
             x_prefix,
             x
         ], dim=1)  # (bs, num_prefix + num_patches, dim)
+        
+        attn_mask = None
+        if masks_after_patch_embed is not None:
+            patch_keep = masks_after_patch_embed.squeeze(-1) > 0.5 # (bs, num_patches)
+            prefix_keep = torch.ones(x.shape[0], num_prefix, dtype=torch.bool, device=x.device)
+            full_keep = torch.cat([prefix_keep, patch_keep], dim=1)  # (bs, num_prefix + num_patches)
+            key_pad = ~full_keep
+            
+            attn_mask = x.new_zeros((x.shape[0], 1, x.shape[1], x.shape[1]))
+            attn_mask = attn_mask.masked_fill(key_pad[:, None, None, :], float('-inf'))
 
-        x = self.model.blocks(x)
+        for blk in self.model.blocks:
+            x = blk(x, attn_mask=attn_mask)
+
         x = self.model.norm(x)
+        
+        if masks_after_patch_embed is not None:
+            # Zero out the masked tokens in query positions
+            full_keep_f = full_keep.unsqueeze(-1).to(x.dtype)  # (B, L, 1)
+            x = x * full_keep_f
 
         prefix_tokens = x[:, :num_prefix, :]  # (bs, num_prefix, dim)
         patch_tokens = x[:, num_prefix:, :]  # (bs, num_patches, dim)
+
+        if masks_after_patch_embed is not None:
+            # add positional encoding for the masked tokens
+            patch_tokens = patch_tokens + self.model.pos_embed * (1 - patch_keep.unsqueeze(-1).to(x.dtype))
 
         selector_map = self.head(patch_tokens)  # (bs, num_patches, num_output)
         selector_map = rearrange(
