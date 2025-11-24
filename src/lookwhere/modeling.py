@@ -102,6 +102,10 @@ class SelectorAttentionHead(nn.Module):
             pretrained=False,
             img_size=img_size,
         )
+        self.model.patch_embed = nn.Identity()
+        self.model.cls_token = None
+        self.model.reg_token = None
+
         self.proj = nn.Linear(self.model.embed_dim, num_output)
         self.mask_token = nn.Parameter(torch.zeros(1, 1, dim))
         torch.nn.init.normal_(self.mask_token, std=.02)
@@ -155,12 +159,12 @@ class Selector(nn.Module):
         self.mask_prediction = mask_prediction
         if mask_prediction:
             self.attn_head = SelectorAttentionHead(dim=self.model.embed_dim, num_output=num_output, depth=1, img_size=self.img_size)
-
-        self.head = SelectorHead(dim=self.model.embed_dim, num_output=num_output)
+        else:
+            self.head = SelectorHead(dim=self.model.embed_dim, num_output=num_output)
         
-        if pretrained_params is not None:
-            self.head.load_state_dict(pretrained_params["head"])
-    
+            if pretrained_params is not None:
+                self.head.load_state_dict(pretrained_params["head"])
+        
         if selector_params_path is not None:
             self.load_state_dict(torch.load(selector_params_path, map_location="cpu"))
         

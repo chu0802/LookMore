@@ -128,8 +128,7 @@ def main(args):
     lw = load_model(pretrained_params_path=args.pretrained_params_path, head_params_path=args.head_params_path, device="cpu", mask_prediction=True)
 
     selector = lw.selector
-    
-    
+
     selector.to(device)
     
     # copy & freeze a teacher model
