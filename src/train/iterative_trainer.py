@@ -81,11 +81,12 @@ class Trainer:
                         for map, mask_ratio in zip(original_selector_maps, mask_ratios)
                     ])
                     
-                    teacher_output = self.teacher_model(images, masks_after_patch_embed=masks)
-                    teacher_pred_selector_maps = teacher_output["original_selector_map"]
-
-                    diff_maps = (original_selector_maps - teacher_pred_selector_maps).abs()
-                
+                    diff_maps = original_selector_maps.clone()
+                    diff_maps[masks.bool().squeeze(-1)] = diff_maps.min(dim=-1, keepdim=True).values
+                    
+                    # normalize to [-1, 1] per sample
+                    diff_maps = (diff_maps - diff_maps.min(dim=-1, keepdim=True).values) / (diff_maps.max(dim=-1, keepdim=True).values - diff_maps.min(dim=-1, keepdim=True).values) * 2 - 1
+                    
                 student_output = self.model(images, masks_after_patch_embed=masks)
                 student_pred_selector_maps = student_output["original_selector_map"]
                 
@@ -130,9 +131,10 @@ def main(args):
     accelerator = Accelerator()
     device = accelerator.device
     
-    lw = load_model(pretrained_params_path=args.pretrained_params_path, head_params_path=args.head_params_path, device="cpu")
+    lw = load_model(pretrained_params_path=args.pretrained_params_path, head_params_path=args.head_params_path, device="cpu", mask_prediction=True)
 
     selector = lw.selector
+    
     selector.to(device)
     
     # copy & freeze a teacher model
