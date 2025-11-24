@@ -90,10 +90,36 @@ class SelectorHead(nn.Module):
 
     def forward(self, x):
         return self.w2(F.gelu(self.w1(x)))
+    
+
+class SelectorAttentionHead(nn.Module):
+    def __init__(self, dim, num_output, depth=1, img_size=154):
+        super().__init__()
+        self.model = timm.create_model(
+            "vit_base_patch14_reg4_dinov2.lvd142m",
+            depth=depth,
+            num_classes=0,
+            pretrained=False,
+            img_size=img_size,
+        )
+        self.proj = nn.Linear(self.model.embed_dim, num_output)
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, dim))
+        torch.nn.init.normal_(self.mask_token, std=.02)
+        
+    def forward(self, prefix_tokens, patch_tokens):
+        patch_tokens += self.model.pos_embed
+        x = torch.cat([prefix_tokens, patch_tokens], dim=1)
+        x = self.model.blocks(x)
+        x = self.model.norm(x)
+        prefix_tokens = x[:, :prefix_tokens.shape[1], :]
+        patch_tokens = x[:, prefix_tokens.shape[1]:, :]
+        
+        return prefix_tokens, self.proj(patch_tokens)
+
 
 
 class Selector(nn.Module):
-    def __init__(self, lw_type, hr_size, device, pretrained_params=None, selector_params_path=None):
+    def __init__(self, lw_type, hr_size, device, pretrained_params=None, selector_params_path=None, mask_prediction=False):
         super().__init__()
         assert lw_type in ["franca", "dinov2"]
         depth = 3  # our selector is shallow / fast!
@@ -126,11 +152,15 @@ class Selector(nn.Module):
         self.resolution_multiplier = math.ceil(37 / self.input_grid_size)  # (518/14)^2=37
         num_output = int(self.resolution_multiplier * self.resolution_multiplier)
 
+        self.mask_prediction = mask_prediction
+        if mask_prediction:
+            self.attn_head = SelectorAttentionHead(dim=self.model.embed_dim, num_output=num_output, depth=1, img_size=self.img_size)
+
         self.head = SelectorHead(dim=self.model.embed_dim, num_output=num_output)
         
         if pretrained_params is not None:
             self.head.load_state_dict(pretrained_params["head"])
-        
+    
         if selector_params_path is not None:
             self.load_state_dict(torch.load(selector_params_path, map_location="cpu"))
         
@@ -182,10 +212,14 @@ class Selector(nn.Module):
         patch_tokens = x[:, num_prefix:, :]  # (bs, num_patches, dim)
 
         if masks_after_patch_embed is not None:
-            # add positional encoding for the masked tokens
-            patch_tokens = patch_tokens + self.model.pos_embed * (1 - patch_keep.unsqueeze(-1).to(x.dtype))
+            # filled the zero-out tokens with mask token
+            mask_tokens = self.attn_head.mask_token.repeat(x.shape[0], patch_tokens.shape[1], 1)  # (bs, num_patches, dim)
+            patch_tokens = patch_tokens + mask_tokens * (1 - patch_keep.unsqueeze(-1).to(x.dtype))
+            
+            prefix_tokens, selector_map = self.attn_head(prefix_tokens, patch_tokens)
+        else: 
+            selector_map = self.head(patch_tokens)  # (bs, num_patches, num_output)
 
-        selector_map = self.head(patch_tokens)  # (bs, num_patches, num_output)
         selector_map = rearrange(
             selector_map,
             "b (h w) (i j) -> b 1 (h i) (w j)",
@@ -209,7 +243,7 @@ class Selector(nn.Module):
 
 
 class LookWhereDownstream(nn.Module):
-    def __init__(self, pretrained_params_path, high_res_size, num_classes, k, is_cls, device, head_params_path=None, lw_type="dinov2", selector_params_path=None):
+    def __init__(self, pretrained_params_path, high_res_size, num_classes, k, is_cls, device, head_params_path=None, lw_type="dinov2", selector_params_path=None, mask_prediction=False):
         super().__init__()
         # supports classification (1 prediction per image) and segmentation (1 prediction per patch)
 
@@ -229,7 +263,8 @@ class LookWhereDownstream(nn.Module):
             selector_params_path=selector_params_path,
             lw_type=self.lw_type,
             hr_size=high_res_size,
-            device=device
+            device=device,
+            mask_prediction=mask_prediction,
         )
         self.extractor = Extractor(
             pretrained_params=all_pretrained_params["extractor"],
@@ -282,7 +317,7 @@ class LookWhereDownstream(nn.Module):
 
         return self.forward_with_selector_dict(images, selector_dict, k=k)
 
-def load_model(pretrained_params_path, high_res_size=518, num_classes=1000, k_ratio=0.1, is_cls=True, device="cuda", head_params_path=None, selector_params_path=None):
+def load_model(pretrained_params_path, high_res_size=518, num_classes=1000, k_ratio=0.1, is_cls=True, device="cuda", head_params_path=None, selector_params_path=None, mask_prediction=False):
     num_high_res_patches = (high_res_size // 14)**2
     k = int(k_ratio * num_high_res_patches)
 
@@ -295,5 +330,6 @@ def load_model(pretrained_params_path, high_res_size=518, num_classes=1000, k_ra
         device=device,
         head_params_path=head_params_path,
         selector_params_path=selector_params_path,
+        mask_prediction=mask_prediction,
     )
     return model
