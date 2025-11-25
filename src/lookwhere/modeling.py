@@ -232,11 +232,14 @@ class Selector(nn.Module):
             i=self.resolution_multiplier,
             j=self.resolution_multiplier
         )
-        upsample_selector_map = F.interpolate(selector_map, size=(self.target_grid_size, self.target_grid_size), mode='bilinear', align_corners=False)
-        upsample_selector_map = rearrange(upsample_selector_map, "b 1 h w -> b (h w)")
+        # upsample_selector_map = F.interpolate(selector_map, size=(self.target_grid_size, self.target_grid_size), mode='bilinear', align_corners=False)
+        # upsample_selector_map = rearrange(upsample_selector_map, "b 1 h w -> b (h w)")
         
         original_selector_map = F.interpolate(selector_map, size=(self.input_grid_size, self.input_grid_size), mode='bilinear', align_corners=False)
+        upsample_selector_map = F.interpolate(original_selector_map, size=(self.target_grid_size, self.target_grid_size), mode='bilinear', align_corners=False)
+
         original_selector_map = rearrange(original_selector_map, "b 1 h w -> b (h w)")
+        upsample_selector_map = rearrange(upsample_selector_map, "b 1 h w -> b (h w)")
         
         return {
             "original_selector_map": original_selector_map,
