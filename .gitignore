@@ -6,3 +6,4 @@ tmp.py
 wandb
 draw*.py
 .vscode
+*.txt
