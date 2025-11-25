@@ -176,7 +176,6 @@ class Selector(nn.Module):
         x = self.model.patch_embed(x)  # (bs, num_patches, dim)
         x = x + self.model.pos_embed
 
-
         if self.lw_type == "dinov2":
             x_prefix = torch.cat([
                 self.model.cls_token.expand(x.shape[0], -1, -1),

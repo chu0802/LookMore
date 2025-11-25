@@ -82,7 +82,11 @@ class Trainer:
                     ])
                     
                     diff_maps = original_selector_maps.clone()
-                    diff_maps[masks.bool().squeeze(-1)] = diff_maps.min(dim=-1, keepdim=True).values
+                    
+                    mins = diff_maps.min(dim=-1, keepdim=True).values
+                    mins_expanded = mins.expand_as(diff_maps)
+                    
+                    diff_maps = torch.where(masks.bool().squeeze(-1), mins_expanded, diff_maps)
                     
                     # normalize to [-1, 1] per sample
                     diff_maps = (diff_maps - diff_maps.min(dim=-1, keepdim=True).values) / (diff_maps.max(dim=-1, keepdim=True).values - diff_maps.min(dim=-1, keepdim=True).values) * 2 - 1
