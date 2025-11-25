@@ -148,7 +148,7 @@ def main(args):
     
     if accelerator.is_main_process:
         wandb.init(
-            project="iterative_token_selection",
+            project="iterative_mae_res_prediction",
             config={
                 "seed": args.seed,
                 "num_epoches": args.num_epoches,
@@ -192,7 +192,7 @@ if __name__ == "__main__":
         Arg("-p", "--pretrained_params_path", type=none_or_str, default="models/lookwhere_dinov2.pt"),
         Arg("-e", "--head_params_path", type=none_or_str, default="models/imagenet_classifier_head_9.pt"),
         Arg("-n", "--num_epoches", type=int, default=10),
-        Arg("-f", "--final_output_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/iterative_token_selection/models")),
+        Arg("-f", "--final_output_dir", type=Path, default=Path("/home/yuchuyu/project/lookwhere/iterative_mae_res_prediction/models")),
     )
     
     args.final_output_dir.mkdir(parents=True, exist_ok=True)
