@@ -128,6 +128,12 @@ def main(args):
     lw = load_model(pretrained_params_path=args.pretrained_params_path, head_params_path=args.head_params_path, device="cpu", mask_prediction=True)
 
     selector = lw.selector
+    
+    # freeze the selector's blocks except the attention head
+    for param in selector.parameters():
+        param.requires_grad = False
+    for param in selector.attn_head.parameters():
+        param.requires_grad = True
 
     selector.to(device)
     
