@@ -169,8 +169,157 @@ class Selector(nn.Module):
             self.load_state_dict(torch.load(selector_params_path, map_location="cpu"))
         
         self.to(device)
-    
-    def forward(self, x, masks=None, masks_after_patch_embed=None):
+
+    def forward_with_dropping_instancewise(self, x: torch.Tensor, masks_after_patch_embed: torch.Tensor):
+        x = F.interpolate(x, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
+
+        x = self.model.patch_embed(x)  # (bs, num_patches, dim)
+        x = x + self.model.pos_embed
+        
+        x_prefix = torch.cat([
+            self.model.cls_token.expand(x.shape[0], -1, -1),
+            self.model.reg_token.expand(x.shape[0], -1, -1),
+        ], dim=1)  # (B, 1 + num_registers, dim)
+        
+        B, num_patches, dim = x.shape
+        num_prefix = x_prefix.shape[1]
+        L_full = num_prefix + num_patches
+
+        x = torch.cat([x_prefix, x], dim=1)  # (B, L_full, dim)
+
+        patch_keep = masks_after_patch_embed.squeeze(-1) > 0.5  # (B, num_patches)
+        prefix_keep = torch.ones(B, num_prefix, dtype=torch.bool, device=x.device)
+        full_keep = torch.cat([prefix_keep, patch_keep], dim=1)  # (B, L_full)
+
+        outs = []
+        for b in range(B):
+            keep_idx = full_keep[b].nonzero(as_tuple=False).squeeze(1)  # (L_b,)
+            x_b = x[b:b+1, keep_idx, :]  # (1, L_b, dim)
+
+            for blk in self.model.blocks:
+                x_b = blk(x_b)
+            x_b = self.model.norm(x_b)
+
+            x_full_b = x.new_zeros(1, L_full, dim)
+            x_full_b[:, keep_idx, :] = x_b
+            outs.append(x_full_b)
+
+        x = torch.cat(outs, dim=0)  # (B, L_full, dim)
+
+        prefix_tokens = x[:, :num_prefix, :]          # (B, num_prefix, dim)
+        patch_tokens  = x[:, num_prefix:, :]          # (B, num_patches, dim)
+
+        patch_keep_f = patch_keep.unsqueeze(-1)   # (B, num_patches, 1)
+        mask_tokens = self.attn_head.mask_token.expand(
+            B, num_patches, -1
+        )                                         # (B, num_patches, dim)
+
+        patch_tokens = torch.where(patch_keep_f, patch_tokens, mask_tokens)
+
+        prefix_tokens, selector_map = self.attn_head(prefix_tokens, patch_tokens)
+
+        selector_map = rearrange(
+            selector_map,
+            "b (h w) (i j) -> b 1 (h i) (w j)",
+            h=self.input_grid_size,
+            w=self.input_grid_size,
+            i=self.resolution_multiplier,
+            j=self.resolution_multiplier
+        )
+
+        original_selector_map = F.interpolate(
+            selector_map,
+            size=(self.input_grid_size, self.input_grid_size),
+            mode='bilinear', align_corners=False
+        )
+        upsample_selector_map = F.interpolate(
+            original_selector_map,
+            size=(self.target_grid_size, self.target_grid_size),
+            mode='bilinear', align_corners=False
+        )
+
+        original_selector_map = rearrange(original_selector_map, "b 1 h w -> b (h w)")
+        upsample_selector_map = rearrange(upsample_selector_map, "b 1 h w -> b (h w)")
+
+        return {
+            "original_selector_map": original_selector_map,
+            "selector_map": upsample_selector_map,
+            "prefix_tokens": prefix_tokens,
+            "patch_tokens": patch_tokens,
+        }
+
+    def forward_with_dropping(self, x: torch.Tensor, masks_after_patch_embed: torch.Tensor):
+        x = F.interpolate(x, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
+
+        x = self.model.patch_embed(x)  # (bs, num_patches, dim)
+        x = x + self.model.pos_embed
+        
+        B, num_patches, dim = x.shape
+        # drop the tokens
+        patch_keep = masks_after_patch_embed.squeeze(-1) > 0.5
+        K = patch_keep.sum(dim=1).max().item()        
+        positions = torch.arange(num_patches, device=x.device).unsqueeze(0).expand(B, -1)
+        keep_pos_p = positions.masked_select(patch_keep).reshape(B, K)
+        
+        x_p_kept = x.gather(
+            dim=1,
+            index=keep_pos_p.unsqueeze(-1).expand(-1, -1, dim)
+        )
+
+        x_prefix = torch.cat([
+            self.model.cls_token.expand(x.shape[0], -1, -1),
+            self.model.reg_token.expand(x.shape[0], -1, -1),
+        ], dim=1)  # (bs, 1 + num_registers, dim)
+        
+        num_prefix = x_prefix.shape[1]
+
+        x_kept = torch.cat([x_prefix, x_p_kept], dim=1)
+        
+        for blk in self.model.blocks:
+            x_kept = blk(x_kept)
+        x_kept = self.model.norm(x_kept)
+
+        prefix_tokens = x_kept[:, :num_prefix, :]        # (B, num_prefix, dim)
+        visible_tokens = x_kept[:, num_prefix:, :]       # (B, K, dim)
+
+        patch_tokens = x.new_zeros(B, num_patches, dim)
+        patch_tokens.scatter_(
+            dim=1,
+            index=keep_pos_p.unsqueeze(-1).expand(-1, -1, dim),
+            src=visible_tokens
+        )
+        patch_keep_f = patch_keep.unsqueeze(-1)          # (B, num_patches, 1)
+        mask_tokens = self.attn_head.mask_token.expand(
+            B, num_patches, -1
+        )                                                # (B, num_patches, dim)
+
+        patch_tokens = torch.where(patch_keep_f, patch_tokens, mask_tokens)
+
+        prefix_tokens, selector_map = self.attn_head(prefix_tokens, patch_tokens)
+
+        selector_map = rearrange(
+            selector_map,
+            "b (h w) (i j) -> b 1 (h i) (w j)",
+            h=self.input_grid_size,
+            w=self.input_grid_size,
+            i=self.resolution_multiplier,
+            j=self.resolution_multiplier
+        )
+
+        original_selector_map = F.interpolate(selector_map, size=(self.input_grid_size, self.input_grid_size), mode='bilinear', align_corners=False)
+        upsample_selector_map = F.interpolate(original_selector_map, size=(self.target_grid_size, self.target_grid_size), mode='bilinear', align_corners=False)
+
+        original_selector_map = rearrange(original_selector_map, "b 1 h w -> b (h w)")
+        upsample_selector_map = rearrange(upsample_selector_map, "b 1 h w -> b (h w)")
+        
+        return {
+            "original_selector_map": original_selector_map,
+            "selector_map": upsample_selector_map,
+            "prefix_tokens": prefix_tokens,
+            "patch_tokens": patch_tokens
+        }
+
+    def forward(self, x, masks_after_patch_embed=None):
         x = F.interpolate(x, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
 
         x = self.model.patch_embed(x)  # (bs, num_patches, dim)
@@ -231,9 +380,7 @@ class Selector(nn.Module):
             i=self.resolution_multiplier,
             j=self.resolution_multiplier
         )
-        # upsample_selector_map = F.interpolate(selector_map, size=(self.target_grid_size, self.target_grid_size), mode='bilinear', align_corners=False)
-        # upsample_selector_map = rearrange(upsample_selector_map, "b 1 h w -> b (h w)")
-        
+
         original_selector_map = F.interpolate(selector_map, size=(self.input_grid_size, self.input_grid_size), mode='bilinear', align_corners=False)
         upsample_selector_map = F.interpolate(original_selector_map, size=(self.target_grid_size, self.target_grid_size), mode='bilinear', align_corners=False)
 
