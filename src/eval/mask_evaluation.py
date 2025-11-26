@@ -27,10 +27,11 @@ def cos(a, b, **kwargs):
 
 def maps_to_masks(maps, k_ratio, device="cpu"):
     k = int(maps.shape[-1] * k_ratio)
-    topk_vals, _ = torch.topk(maps, k, dim=-1)
-    thresh = topk_vals[..., -1, None]
+    _, topk_idx = torch.topk(maps, k, dim=-1)
+    masks = maps.new_zeros(maps.shape).to(device)
+    masks.scatter_(-1, topk_idx, 1.0)
     
-    return (maps >= thresh).float()
+    return masks
 
 def main(args):
     ground_truth_folder = Path("/home/yuchuyu/project/lookwhere/output/validation/maps_masked_ratio_0.0")
