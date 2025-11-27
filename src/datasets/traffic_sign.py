@@ -11,7 +11,6 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-from argparse import Namespace
 from pathlib import Path
 
 import ssl
@@ -267,26 +266,29 @@ class TrafficSigns(Dataset):
     CLASSES = ["EMPTY", *LIMITS]
     IMG_SIZE = (994, 994)
 
-    def __init__(self, data_dir=None, seed=1102, train=True):
+    def __init__(self, data_dir=None, seed=1102, train=True, transform=None):
         if data_dir is None:
             data_dir = Path(os.environ.get("RAW_DATASET_DIR")) / "traffic_sign"
         self._data = self._filter(STS(data_dir, train, seed))
         
-        transform_list = [
-            transforms.Lambda(lambda img: img.convert("RGB")),
-            transforms.Resize([*self.IMG_SIZE], interpolation=transforms.InterpolationMode.BICUBIC)
-        ]
-        
-        if train:
-            # a placeholder for possible data augmentation in training stage.
-            pass
+        if transform is None:
+            transform_list = [
+                transforms.Lambda(lambda img: img.convert("RGB")),
+                transforms.Resize([*self.IMG_SIZE], interpolation=transforms.InterpolationMode.BICUBIC)
+            ]
+            
+            if train:
+                # a placeholder for possible data augmentation in training stage.
+                pass
 
-        transform_list += [
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ]
-           
-        self.transform = transforms.Compose(transform_list)
+            transform_list += [
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ]
+            
+            self.transform = transforms.Compose(transform_list)
+        else:
+            self.transform = transform
 
     def _filter(self, data):
 
@@ -328,7 +330,7 @@ class TrafficSigns(Dataset):
         img = Image.open(img)
         img = self.transform(img)
 
-        return img, category
+        return {"image": img, "label": category}
 
 if __name__ == "__main__":
     traffic_signs = TrafficSigns(train=True)
