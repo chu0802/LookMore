@@ -12,6 +12,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 
 from argparse import Namespace
+from pathlib import Path
 
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -190,7 +191,7 @@ class STS:
 
     def __init__(self, directory, train=True, seed=0):
 
-        cwd = os.getcwd().replace('dataset', '')
+        cwd = os.getcwd().replace("dataset", "")
         directory = path.join(cwd, directory)
         ensure_dataset_exists(directory)
 
@@ -266,13 +267,10 @@ class TrafficSigns(Dataset):
     CLASSES = ["EMPTY", *LIMITS]
     IMG_SIZE = (994, 994)
 
-    def __init__(self, conf, train=True):
-
-        self.patch_size = conf.patch_size
-        self.patch_stride = conf.patch_stride
-        self.tasks = conf.tasks
-        
-        self._data = self._filter(STS(conf.data_dir, train, conf.seed))
+    def __init__(self, data_dir=None, seed=1102, train=True):
+        if data_dir is None:
+            data_dir = Path(os.environ.get("RAW_DATASET_DIR")) / "traffic_sign"
+        self._data = self._filter(STS(data_dir, train, seed))
         
         transform_list = [
             transforms.Lambda(lambda img: img.convert("RGB")),
@@ -330,24 +328,8 @@ class TrafficSigns(Dataset):
         img = Image.open(img)
         img = self.transform(img)
 
-        data_dict = {'input': img}
-        for task in self.tasks.values():
-            data_dict[task['name']] = category
-
-        return data_dict
+        return img, category
 
 if __name__ == "__main__":
-    conf = Namespace(
-        seed=1102,
-        data_dir="/home/yuchuyu/project/raw_dataset/traffic_sign",
-        tasks = {
-            "task0": {
-                "id": 0,
-                "name": "sign",
-                "act_fn": "softmax",
-                "metric": "accuracy",
-            }
-        }
-    )
-    
-    traffic_signs = TrafficSigns(conf, train=True)
+    traffic_signs = TrafficSigns(train=True)
+    breakpoint()
