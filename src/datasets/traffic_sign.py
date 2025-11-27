@@ -351,4 +351,3 @@ if __name__ == "__main__":
     )
     
     traffic_signs = TrafficSigns(conf, train=True)
-    breakpoint()
