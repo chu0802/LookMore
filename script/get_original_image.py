@@ -7,41 +7,40 @@ from pathlib import Path
 from PIL import Image
 from src.utils import seed_everything
 from tqdm import tqdm
+from src.datasets.traffic_sign import TrafficSigns
+from src.datasets.transforms import trans_for_save
+from functools import partial
+
+# def trans_for_save(examples, img_size=518):
+#     """Transform that only resizes without normalization for saving"""
+#     transform = transforms.Compose([
+#         transforms.Lambda(lambda img: img.convert("RGB")),
+#         transforms.Resize((img_size, img_size), interpolation=transforms.InterpolationMode.BICUBIC),
+#         transforms.Resize((154, 154), interpolation=transforms.InterpolationMode.BILINEAR),
+#         transforms.ToTensor(),
+#     ])
+#     examples["image"] = [transform(example) for example in examples["image"]]
+#     return examples
 
 
-def trans_for_save(examples, img_size=518):
-    """Transform that only resizes without normalization for saving"""
-    transform = transforms.Compose([
-        transforms.Lambda(lambda img: img.convert("RGB")),
-        transforms.Resize((img_size, img_size), interpolation=transforms.InterpolationMode.BICUBIC),
-        transforms.Resize((154, 154), interpolation=transforms.InterpolationMode.BILINEAR),
-        transforms.ToTensor(),
-    ])
-    examples["image"] = [transform(example) for example in examples["image"]]
-    return examples
-
+transform_for_save = transforms.Compose([
+    transforms.Lambda(lambda img: img.convert("RGB")),
+    transforms.Resize((994, 994), interpolation=transforms.InterpolationMode.BICUBIC),
+    transforms.ToTensor(),
+])
 
 def main(args):
     seed_everything(args.seed)
     
     # output_dir = Path(args.output_dir) / "vis" / args.mode / "original"
-    output_dir = Path(args.output_dir) / "vis" / args.mode / "cum_mask" / "original" / f"mask_ratio_{args.mask_ratio}"
+    output_dir = Path(args.output_dir) / "traffic_sign_no_finetune" / "original"
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    print(f"Loading ImageNet {args.mode} dataset...")
-    ds = load_dataset_with_index("ILSVRC/imagenet-1k", split=args.mode)
-    ds.set_transform(lambda x: trans_for_save(x, img_size=args.img_size))
+    print(f"Loading Traffic Signs {args.mode} dataset...")
+    ds = TrafficSigns(train=False, transform=transform_for_save)
     
-    for i in range(args.num):
+    for i in range(len(ds)):
         img = ds[i]["image"]
-        if args.mask_ratio > 0:
-            img *= cumulative_mask_generator(
-                shape=(154, 154),
-                mask_ratio=args.mask_ratio,
-                indices=i,
-                base_seed=1102,
-                device="cpu"
-            ).squeeze(0)
         img = transforms.ToPILImage()(img)
         img.save(output_dir / f"{i:05d}.png")
 
