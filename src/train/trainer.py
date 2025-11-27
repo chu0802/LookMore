@@ -2,7 +2,7 @@ from accelerate import Accelerator
 from src.utils import Arg, argument_parser
 from pathlib import Path
 from src.lookwhere.modeling import load_model
-from src.lookwhere.transforms import trans
+from datasets.transforms import trans
 from src.utils import seed_everything, none_or_str
 from torch.utils.data import Dataset, DataLoader
 import torch

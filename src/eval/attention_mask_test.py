@@ -5,7 +5,7 @@ from src.utils import load_dataset_with_index
 from src.lookwhere.modeling import load_model
 from src.utils import seed_everything
 import torch
-from src.lookwhere.transforms import trans
+from datasets.transforms import trans
 from torch.utils.data import DataLoader
 from pathlib import Path
 from tqdm import tqdm

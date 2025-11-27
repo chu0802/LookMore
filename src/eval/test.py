@@ -1,7 +1,7 @@
 import torch
 from torchvision import transforms
 from src.lookwhere.modeling import load_model
-from src.lookwhere.transforms import trans
+from datasets.transforms import trans
 from torch.utils.data import DataLoader
 from src.utils import Arg, argument_parser, cumulative_mask_generator
 from src.utils import load_dataset_with_index

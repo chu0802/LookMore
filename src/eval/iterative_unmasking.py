@@ -2,7 +2,7 @@ from src.eval.test import Tester
 from src.eval.mask_evaluation import maps_to_masks
 import torch
 from src.lookwhere.modeling import load_model
-from src.lookwhere.transforms import trans
+from datasets.transforms import trans
 from torch.utils.data import DataLoader
 from src.utils import Arg, argument_parser
 from src.utils import load_dataset_with_index
@@ -26,6 +26,7 @@ class IterativeUnmaskTester(Tester):
         self.all_preds = {i: [] for i in range(self.iteration)}
         self.all_masks = {i: [] for i in range(self.iteration)}
         self.all_residual_maps = {i: [] for i in range(self.iteration)}
+        self.res_counter = {i: 0 for i in range(self.iteration)}
 
         self.output_dir = {i: self.output_dir / f"iteration_{i}" for i in range(self.iteration)}
         for v in self.output_dir.values():
@@ -48,9 +49,9 @@ class IterativeUnmaskTester(Tester):
         for k, v in self.all_residual_maps.items():
             if len(v) > threshold:
                 all_residual_maps = torch.cat(v, dim=0)
-                torch.save(all_residual_maps, self.output_dir[k] / f"residual_map_{self.counter[k]:03d}.pt")
+                torch.save(all_residual_maps, self.output_dir[k] / f"residual_map_{self.res_counter[k]:03d}.pt")
                 self.all_residual_maps[k] = []
-                self.counter[k] += 1
+                self.res_counter[k] += 1
     
     def dump_accuracy(self):
         for k, v in self.all_preds.items():
@@ -82,7 +83,7 @@ class IterativeUnmaskTester(Tester):
             
             for iter in range(self.iteration):
                 # compute selection maps and accuracy
-                selector_dict = self.lw.selector.forward(images, masks_after_patch_embed=masks)
+                selector_dict = self.lw.selector.forward_with_dropping(images, masks_after_patch_embed=masks)
                 outputs = self.lw.forward_with_selector_dict(images, selector_dict)
                 
                 selector_maps = selector_dict["selector_map"].detach().to("cpu")
@@ -95,7 +96,7 @@ class IterativeUnmaskTester(Tester):
                 self.mask_ratios[iter] += (masks.squeeze().mean(dim=-1)).sum().item()
 
                 # iterative unmasking
-                next_tokens_maps = self.iterative_token_predictor.forward(images, masks_after_patch_embed=masks)["original_selector_map"]
+                next_tokens_maps = self.iterative_token_predictor.forward_with_dropping(images, masks_after_patch_embed=masks)["original_selector_map"]
                 self.all_residual_maps[iter].append(next_tokens_maps.detach().to("cpu"))
                 
                 next_tokens_maps.masked_fill_(masks.bool().squeeze(-1), float("-inf"))
